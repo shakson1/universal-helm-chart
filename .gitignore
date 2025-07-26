@@ -1,0 +1,35 @@
+
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Helm chart output and cache
+*.tgz
+charts/
+.tmp/
+.cache/
+
+# Kubernetes config or secrets
+kubeconfig
+secrets.yaml
+values-secret.yaml
+
+# Editor or IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Node.js
+node_modules/
+
+# Terraform
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
