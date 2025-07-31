@@ -6,14 +6,30 @@ kind: Service
 metadata:
   name: {{ include "universal-app.fullname" . }}
   labels:
-    {{- include "universal-app.labels" . | nindent 6 }}
+    {{- include "universal-app.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.service.annotations | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
+  {{- if .Values.service.ports }}
+  ports:
+    {{- range .Values.service.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ .protocol }}
+      {{- if .nodePort }}
+      nodePort: {{ .nodePort }}
+      {{- end }}
+    {{- end }}
+  {{- else }}
+  # Legacy single port support
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+  {{- end }}
   selector:
     app: {{ include "universal-app.name" . }}
-  ports:
-    - port: {{ .Values.service.port }}
-      targetPort: {{ .Values.service.targetPort | default .Values.service.port }}
-      protocol: TCP
-      name: http
 {{- end }}

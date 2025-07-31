@@ -1,58 +1,457 @@
-kind: Deployment # or DaemonSet or StatefulSet
+# Universal Helm Chart Configuration
+# This chart supports Deployment, DaemonSet, and StatefulSet workloads
 
+# Workload type: Deployment, DaemonSet, or StatefulSet
+kind: Deployment
+
+# Replica configuration
 replicaCount: 2
 
+# Image configuration
 image:
   repository: nginx
   tag: latest
   pullPolicy: IfNotPresent
+  # For private registries
+  pullSecrets: []
+  # - name: regcred
 
+# Multiple containers support
+containers:
+  - name: app
+    image:
+      repository: nginx
+      tag: latest
+      pullPolicy: IfNotPresent
+    ports:
+      - name: http
+        containerPort: 80
+        protocol: TCP
+    env: []
+    envFrom: []
+    # - configMapRef:
+    #     name: app-config
+    # - secretRef:
+    #     name: app-secrets
+    resources: {}
+    #   requests:
+    #     memory: "64Mi"
+    #     cpu: "250m"
+    #   limits:
+    #     memory: "128Mi"
+    #     cpu: "500m"
+    volumeMounts: []
+    # - name: config-volume
+    #   mountPath: /etc/config
+    # - name: data-volume
+    #   mountPath: /data
+    livenessProbe: {}
+    #   httpGet:
+    #     path: /health
+    #     port: 80
+    #   initialDelaySeconds: 30
+    #   periodSeconds: 10
+    readinessProbe: {}
+    #   httpGet:
+    #     path: /ready
+    #     port: 80
+    #   initialDelaySeconds: 5
+    #   periodSeconds: 5
+    startupProbe: {}
+    #   httpGet:
+    #     path: /startup
+    #     port: 80
+    #   failureThreshold: 30
+    #   periodSeconds: 10
+    securityContext: {}
+    #   runAsNonRoot: true
+    #   runAsUser: 1000
+    #   capabilities:
+    #     drop:
+    #     - ALL
+    command: []
+    args: []
+
+# Service configuration
 service:
   enabled: true
   type: ClusterIP
-  port: 80
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  annotations: {}
 
+# Ingress configuration
 ingress:
-  enabled: true
+  enabled: false
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
   hosts:
     - host: example.com
       paths:
         - path: /
           pathType: Prefix
-  tls:
-    - hosts:
-        - example.com
-      secretName: example-tls
+  tls: []
+  # - hosts:
+  #     - example.com
+  #   secretName: example-tls
 
+# Horizontal Pod Autoscaler
 hpa:
   enabled: false
   minReplicas: 1
   maxReplicas: 5
   targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+  behavior: {}
+  #   scaleDown:
+  #     stabilizationWindowSeconds: 300
+  #     policies:
+  #     - type: Percent
+  #       value: 10
+  #       periodSeconds: 60
 
-env:
-  - name: ENVIRONMENT
-    value: production
+# Vertical Pod Autoscaler
+vpa:
+  enabled: false
+  mode: Auto
+  # mode: Initial, Auto, or Off
+  minAllowed:
+    cpu: 100m
+    memory: 50Mi
+  maxAllowed:
+    cpu: 1
+    memory: 500Mi
 
-containerName: app
+# Pod Disruption Budget
+pdb:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
 
+# Network Policy
+networkPolicy:
+  enabled: false
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 80
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 53
+
+# Persistent Volume Claims (for StatefulSets)
+persistentVolumeClaims: []
+# - name: data
+#   accessModes:
+#     - ReadWriteOnce
+#   resources:
+#     requests:
+#       storage: 1Gi
+#   storageClassName: standard
+
+# Volumes
+volumes: []
+# - name: config-volume
+#   configMap:
+#     name: app-config
+# - name: secret-volume
+#   secret:
+#     secretName: app-secrets
+# - name: empty-dir
+#   emptyDir: {}
+
+# ConfigMaps
+configMaps: []
+# - name: app-config
+#   data:
+#     config.yaml: |
+#       environment: production
+#       log_level: info
+
+# Secrets
+secrets: []
+# - name: app-secrets
+#   type: Opaque
+#   data:
+#     username: YWRtaW4=
+#     password: cGFzc3dvcmQ=
+
+# Service Account
+serviceAccount:
+  enabled: true
+  name: ""
+  annotations: {}
+  # automountServiceAccountToken: true
+
+# Pod Security Context
+podSecurityContext: {}
+# fsGroup: 2000
+# runAsNonRoot: true
+# runAsUser: 1000
+# runAsGroup: 3000
+# supplementalGroups: [1000]
+
+# Container Security Context
+containerSecurityContext: {}
+# allowPrivilegeEscalation: false
+# capabilities:
+#   drop:
+#   - ALL
+# privileged: false
+# readOnlyRootFilesystem: true
+# runAsNonRoot: true
+# runAsUser: 1000
+
+# Node Selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+# - key: "key"
+#   operator: "Equal"
+#   value: "value"
+#   effect: "NoSchedule"
+
+# Affinity
+affinity: {}
+# podAffinity:
+#   requiredDuringSchedulingIgnoredDuringExecution:
+#   - labelSelector:
+#       matchExpressions:
+#       - key: security
+#         operator: In
+#         values:
+#         - S1
+#     topologyKey: failure-domain.beta.kubernetes.io/zone
+# podAntiAffinity:
+#   preferredDuringSchedulingIgnoredDuringExecution:
+#   - weight: 100
+#     podAffinityTerm:
+#       labelSelector:
+#         matchExpressions:
+#         - key: app
+#           operator: In
+#           values:
+#           - my-app
+#       topologyKey: kubernetes.io/hostname
+
+# Annotations for the main workload
 annotations: {}
 
+# Labels for the main workload
+labels: {}
+
+# Termination grace period
+terminationGracePeriodSeconds: 30
+
+# Dns Policy
+dnsPolicy: ClusterFirst
+
+# Restart Policy
+restartPolicy: Always
+
+# Host Network
+hostNetwork: false
+
+# Host PID
+hostPID: false
+
+# Host IPC
+hostIPC: false
+
+# Share Process Namespace
+shareProcessNamespace: false
+
+# Security Context
+securityContext: {}
+
+# Priority Class Name
+priorityClassName: ""
+
+# Runtime Class Name
+runtimeClassName: ""
+
+# Enable Service Links
+enableServiceLinks: true
+
+# Topology Spread Constraints
+topologySpreadConstraints: []
+# - maxSkew: 1
+#   topologyKey: topology.kubernetes.io/zone
+#   whenUnsatisfiable: DoNotSchedule
+#   labelSelector:
+#     matchLabels:
+#       app: my-app
+
+# Init Containers
+initContainers: []
+# - name: init-db
+#   image: busybox:1.28
+#   command: ['sh', '-c', 'until nslookup mydb.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for mydb; sleep 2; done;']
+#   env: []
+#   volumeMounts: []
+
+# Sidecar Containers
+sidecarContainers: []
+# - name: sidecar
+#   image: nginx:alpine
+#   ports:
+#     - containerPort: 8080
+#   volumeMounts:
+#     - name: shared-data
+#       mountPath: /shared
+
+# Lifecycle Hooks
+lifecycle: {}
+# postStart:
+#   exec:
+#     command:
+#     - /bin/sh
+#     - -c
+#     - echo 'Hello from the postStart handler'
+# preStop:
+#   exec:
+#     command:
+#     - /bin/sh
+#     - -c
+#     - echo 'Hello from the preStop handler'
+
+# Pod Template Annotations
+podAnnotations: {}
+
+# Pod Template Labels
+podLabels: {}
+
+# Image Pull Secrets
+imagePullSecrets: []
+# - name: regcred
+
+# Host Aliases
+hostAliases: []
+# - ip: "127.0.0.1"
+#   hostnames:
+#   - "foo.local"
+#   - "bar.local"
+
+# DNS Config
+dnsConfig: {}
+# nameservers:
+#   - 1.2.3.4
+# searches:
+#   - ns1.svc.cluster-domain.example
+#   - my.dns.search.suffix
+# options:
+#   - name: ndots
+#     value: "2"
+#   - name: edns0
+
+# Pod Template Security Context
+podTemplateSecurityContext: {}
+
+# Container Ports
+containerPorts: []
+# - name: http
+#   containerPort: 80
+#   protocol: TCP
+# - name: https
+#   containerPort: 443
+#   protocol: TCP
+
+# Environment Variables
+env: []
+# - name: ENVIRONMENT
+#   value: production
+# - name: DATABASE_URL
+#   valueFrom:
+#     secretKeyRef:
+#       name: db-secret
+#       key: url
+
+# Environment Variables from ConfigMap/Secret
+envFrom: []
+# - configMapRef:
+#     name: app-config
+# - secretRef:
+#     name: app-secrets
+
+# Resources
 resources: {}
+# requests:
+#   memory: "64Mi"
+#   cpu: "250m"
+# limits:
+#   memory: "128Mi"
+#   cpu: "500m"
+
+# Volume Mounts
 volumeMounts: []
-volumes: []
+# - name: config-volume
+#   mountPath: /etc/config
+#   readOnly: true
+# - name: data-volume
+#   mountPath: /data
 
-nodeSelector: {}
-tolerations: []
-affinity: {}
+# Liveness Probe
+livenessProbe: {}
+# httpGet:
+#   path: /health
+#   port: 80
+#   httpHeaders:
+#   - name: Custom-Header
+#     value: Awesome
+# initialDelaySeconds: 30
+# periodSeconds: 10
+# timeoutSeconds: 5
+# failureThreshold: 3
+# successThreshold: 1
 
-podSecurityContext: {}
-serviceAccount:
-  name: default
+# Readiness Probe
+readinessProbe: {}
+# httpGet:
+#   path: /ready
+#   port: 80
+# initialDelaySeconds: 5
+# periodSeconds: 5
+# timeoutSeconds: 3
+# failureThreshold: 3
+# successThreshold: 1
 
-configmap:
-  enabled: false
-  data: {}
+# Startup Probe
+startupProbe: {}
+# httpGet:
+#   path: /startup
+#   port: 80
+# failureThreshold: 30
+# periodSeconds: 10
+
+# Command and Args
+command: []
+args: []
+
+# Working Directory
+workingDir: ""
+
+# Stdin
+stdin: false
+
+# Stdin Once
+stdinOnce: false
+
+# TTY
+tty: false
+
+# Container Name (legacy support)
+containerName: app

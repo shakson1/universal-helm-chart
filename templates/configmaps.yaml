@@ -1,16 +1,25 @@
 
 
-
-{{- if .Values.configmap.enabled }}
+{{- if .Values.configMaps }}
+{{- range .Values.configMaps }}
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "universal-app.fullname" . }}
+  name: {{ .name }}
   labels:
-    {{- include "universal-app.labels" . | nindent 4 }}
-data:
-  {{- range $key, $value := .Values.configmap.data }}
-  {{ $key }}: |-
-    {{ $value | nindent 6 }}
+    {{- include "universal-app.labels" $ | nindent 4 }}
+  {{- if .annotations }}
+  annotations:
+    {{- toYaml .annotations | nindent 4 }}
   {{- end }}
+{{- if .data }}
+data:
+  {{- toYaml .data | nindent 2 }}
+{{- end }}
+{{- if .binaryData }}
+binaryData:
+  {{- toYaml .binaryData | nindent 2 }}
+{{- end }}
+{{- end }}
 {{- end }}

@@ -1,0 +1,140 @@
+# Example: PostgreSQL StatefulSet with Persistent Storage
+kind: StatefulSet
+replicaCount: 3
+
+image:
+  repository: postgres
+  tag: "13"
+  pullPolicy: IfNotPresent
+
+containers:
+  - name: postgres
+    image:
+      repository: postgres
+      tag: "13"
+      pullPolicy: IfNotPresent
+    ports:
+      - name: postgres
+        containerPort: 5432
+        protocol: TCP
+    env:
+      - name: POSTGRES_DB
+        value: myapp
+      - name: POSTGRES_USER
+        valueFrom:
+          secretKeyRef:
+            name: postgres-secret
+            key: username
+      - name: POSTGRES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: postgres-secret
+            key: password
+      - name: PGDATA
+        value: /var/lib/postgresql/data/pgdata
+    volumeMounts:
+      - name: data
+        mountPath: /var/lib/postgresql/data
+      - name: logs
+        mountPath: /var/log/postgresql
+      - name: config
+        mountPath: /etc/postgresql/postgresql.conf
+        subPath: postgresql.conf
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    livenessProbe:
+      exec:
+        command:
+          - pg_isready
+          - -U
+          - postgres
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    readinessProbe:
+      exec:
+        command:
+          - pg_isready
+          - -U
+          - postgres
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+persistentVolumeClaims:
+  - name: data
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 20Gi
+    storageClassName: fast-ssd
+  - name: logs
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 10Gi
+    storageClassName: standard
+
+volumes:
+  - name: config
+    configMap:
+      name: postgres-config
+
+configMaps:
+  - name: postgres-config
+    data:
+      postgresql.conf: |
+        # PostgreSQL configuration
+        max_connections = 100
+        shared_buffers = 256MB
+        effective_cache_size = 1GB
+        maintenance_work_mem = 64MB
+        checkpoint_completion_target = 0.9
+        wal_buffers = 16MB
+        default_statistics_target = 100
+        random_page_cost = 1.1
+        effective_io_concurrency = 200
+        work_mem = 4MB
+        min_wal_size = 1GB
+        max_wal_size = 4GB
+
+secrets:
+  - name: postgres-secret
+    type: Opaque
+    stringData:
+      username: postgres
+      password: mysecretpassword
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+
+pdb:
+  enabled: true
+  minAvailable: 2
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - postgres
+        topologyKey: kubernetes.io/hostname
+
+# Legacy support
+containerName: postgres 

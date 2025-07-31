@@ -1,0 +1,131 @@
+# Example: Fluent Bit DaemonSet for Logging
+kind: DaemonSet
+
+image:
+  repository: fluent/fluent-bit
+  tag: "2.1"
+  pullPolicy: IfNotPresent
+
+containers:
+  - name: fluent-bit
+    image:
+      repository: fluent/fluent-bit
+      tag: "2.1"
+      pullPolicy: IfNotPresent
+    ports:
+      - name: metrics
+        containerPort: 2020
+        protocol: TCP
+    env:
+      - name: FLB_LOG_LEVEL
+        value: "info"
+    volumeMounts:
+      - name: varlog
+        mountPath: /var/log
+        readOnly: true
+      - name: varlibdockercontainers
+        mountPath: /var/lib/docker/containers
+        readOnly: true
+      - name: config
+        mountPath: /fluent-bit/etc/fluent-bit.conf
+        subPath: fluent-bit.conf
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "128Mi"
+        cpu: "200m"
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+
+volumes:
+  - name: varlog
+    hostPath:
+      path: /var/log
+  - name: varlibdockercontainers
+    hostPath:
+      path: /var/lib/docker/containers
+  - name: config
+    configMap:
+      name: fluent-bit-config
+
+configMaps:
+  - name: fluent-bit-config
+    data:
+      fluent-bit.conf: |
+        [SERVICE]
+            Flush        1
+            Log_Level    info
+            Parsers_File parsers.conf
+            HTTP_Server  On
+            HTTP_Listen  0.0.0.0
+            HTTP_Port    2020
+
+        [INPUT]
+            Name              tail
+            Tag               kube.*
+            Path              /var/log/containers/*.log
+            Parser            docker
+            DB                /var/log/flb_kube.db
+            Skip_Long_Lines   On
+            Refresh_Interval  10
+
+        [FILTER]
+            Name                kubernetes
+            Match               kube.*
+            Kube_URL           https://kubernetes.default.svc:443
+            Kube_CA_Path       /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            Kube_Token_Path    /var/run/secrets/kubernetes.io/serviceaccount/token
+            Merge_Log          On
+            K8S-Logging.Parser On
+            K8S-Logging.Exclude On
+
+        [OUTPUT]
+            Name        es
+            Match       *
+            Host        elasticsearch-master
+            Port        9200
+            Index       fluentbit
+            Type        _doc
+            Generate_ID On
+            Suppress_Type_Name On
+            tls         On
+            tls.verify  Off
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 2020
+      targetPort: 2020
+      protocol: TCP
+
+serviceAccount:
+  enabled: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/fluent-bit-role
+
+podSecurityContext:
+  fsGroup: 2000
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 2000
+
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations:
+  - key: node-role.kubernetes.io/master
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    effect: NoSchedule
+
+# Legacy support
+containerName: fluent-bit 

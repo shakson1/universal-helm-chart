@@ -1,0 +1,334 @@
+# Example: Multi-container Application with Sidecar
+kind: Deployment
+replicaCount: 3
+
+image:
+  repository: nginx
+  tag: latest
+  pullPolicy: IfNotPresent
+
+containers:
+  - name: app
+    image:
+      repository: myapp
+      tag: v1.0.0
+      pullPolicy: IfNotPresent
+    ports:
+      - name: http
+        containerPort: 8080
+        protocol: TCP
+    env:
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: app-secret
+            key: database-url
+      - name: API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: app-secret
+            key: api-key
+      - name: ENVIRONMENT
+        value: production
+    envFrom:
+      - configMapRef:
+          name: app-config
+    volumeMounts:
+      - name: config
+        mountPath: /etc/config
+        readOnly: true
+      - name: cache
+        mountPath: /var/cache
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 8080
+        httpHeaders:
+          - name: Custom-Header
+            value: Health-Check
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 8080
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+    startupProbe:
+      httpGet:
+        path: /startup
+        port: 8080
+      failureThreshold: 30
+      periodSeconds: 10
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+
+  - name: sidecar
+    image:
+      repository: prom/prometheus
+      tag: v2.30.0
+      pullPolicy: IfNotPresent
+    ports:
+      - name: metrics
+        containerPort: 9090
+        protocol: TCP
+    volumeMounts:
+      - name: prometheus-config
+        mountPath: /etc/prometheus
+        readOnly: true
+      - name: prometheus-data
+        mountPath: /prometheus
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    command:
+      - /bin/prometheus
+    args:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --web.console.templates=/etc/prometheus/consoles
+      - --storage.tsdb.retention.time=200h
+      - --web.enable-lifecycle
+
+initContainers:
+  - name: init-db
+    image:
+      repository: busybox
+      tag: "1.28"
+    command:
+      - sh
+      - -c
+      - "until nslookup postgres.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for postgres; sleep 2; done;"
+    resources:
+      requests:
+        memory: "32Mi"
+        cpu: "50m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
+
+  - name: init-config
+    image:
+      repository: busybox
+      tag: "1.28"
+    command:
+      - sh
+      - -c
+      - "cp /config/* /shared-config/ && echo 'Configuration initialized'"
+    volumeMounts:
+      - name: config
+        mountPath: /config
+        readOnly: true
+      - name: shared-config
+        mountPath: /shared-config
+    resources:
+      requests:
+        memory: "32Mi"
+        cpu: "50m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
+
+volumes:
+  - name: config
+    configMap:
+      name: app-config
+  - name: shared-config
+    emptyDir: {}
+  - name: cache
+    emptyDir: {}
+  - name: prometheus-config
+    configMap:
+      name: prometheus-config
+  - name: prometheus-data
+    emptyDir: {}
+
+configMaps:
+  - name: app-config
+    data:
+      app.yaml: |
+        server:
+          port: 8080
+          host: 0.0.0.0
+        database:
+          max_connections: 10
+          timeout: 30s
+        logging:
+          level: info
+          format: json
+      feature-flags.yaml: |
+        features:
+          new_ui: true
+          beta_features: false
+          analytics: true
+
+  - name: prometheus-config
+    data:
+      prometheus.yml: |
+        global:
+          scrape_interval: 15s
+          evaluation_interval: 15s
+
+        rule_files:
+          # - "first_rules.yml"
+          # - "second_rules.yml"
+
+        scrape_configs:
+          - job_name: 'prometheus'
+            static_configs:
+              - targets: ['localhost:9090']
+
+          - job_name: 'app'
+            static_configs:
+              - targets: ['localhost:8080']
+            metrics_path: /metrics
+            scrape_interval: 5s
+
+secrets:
+  - name: app-secret
+    type: Opaque
+    stringData:
+      database-url: postgresql://user:pass@postgres:5432/myapp
+      api-key: my-secret-api-key-12345
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: app.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts:
+        - app.example.com
+      secretName: app-tls
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+
+vpa:
+  enabled: true
+  mode: Auto
+  minAllowed:
+    cpu: 100m
+    memory: 50Mi
+  maxAllowed:
+    cpu: 1
+    memory: 1Gi
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: database
+      ports:
+        - protocol: TCP
+          port: 5432
+
+serviceAccount:
+  enabled: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/app-role
+
+podSecurityContext:
+  fsGroup: 2000
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 2000
+  supplementalGroups: [1000]
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - myapp
+        topologyKey: kubernetes.io/hostname
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app: myapp
+
+# Legacy support
+containerName: app 

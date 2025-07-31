@@ -11,6 +11,10 @@ spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
   {{- end }}
+  {{- if .Values.ingress.rules }}
+  rules:
+    {{- toYaml .Values.ingress.rules | nindent 4 }}
+  {{- else }}
   rules:
     {{- range .Values.ingress.hosts }}
     - host: {{ .host }}
@@ -23,9 +27,15 @@ spec:
               service:
                 name: {{ include "universal-app.fullname" $ }}
                 port:
+                  {{- if $.Values.service.ports }}
+                  {{- $port := index $.Values.service.ports 0 }}
+                  number: {{ $port.port }}
+                  {{- else }}
                   number: {{ $.Values.service.port }}
+                  {{- end }}
           {{- end }}
     {{- end }}
+  {{- end }}
   {{- if .Values.ingress.tls }}
   tls:
     {{- toYaml .Values.ingress.tls | nindent 4 }}
