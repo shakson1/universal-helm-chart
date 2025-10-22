@@ -1,7 +1,21 @@
 
 # Universal Helm Chart
 
-A comprehensive Helm chart that can deploy any type of Kubernetes application including Deployments, DaemonSets, and StatefulSets with full support for all Kubernetes features.
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/shakokakhadze/universal-helm-chart)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+A comprehensive, production-ready Helm chart that can deploy any type of Kubernetes application with full support for all Kubernetes features. This universal chart eliminates the need to maintain multiple chart templates by supporting all major workload types and features in a single, well-maintained chart.
+
+## ✨ What's New in v1.1.0
+
+- 🆕 **Job & CronJob Support** - Batch and scheduled workloads
+- 🔐 **RBAC Support** - Full Role-Based Access Control
+- ♻️ **Code Refactoring** - 95% reduction in code duplication
+- 🔧 **Update Strategies** - Fine-grained control over rollouts
+- 📋 **Post-Install Notes** - Helpful guidance after installation
+- ☁️ **Cloud IAM Integration** - AWS IRSA, GCP Workload Identity support
+
+[See full changelog](IMPROVEMENTS_v1.1.0.md)
 
 ## Features
 
@@ -9,6 +23,8 @@ A comprehensive Helm chart that can deploy any type of Kubernetes application in
 - **Deployment** - For stateless applications
 - **DaemonSet** - For node-level applications (logging, monitoring)
 - **StatefulSet** - For stateful applications with persistent storage
+- **Job** - For one-time batch processing tasks (NEW in v1.1.0)
+- **CronJob** - For scheduled/recurring tasks (NEW in v1.1.0)
 
 ### 🔧 Container Support
 - **Multiple Containers** - Support for main containers, init containers, and sidecar containers
@@ -31,10 +47,12 @@ A comprehensive Helm chart that can deploy any type of Kubernetes application in
 - **Volume Mounts** - Flexible volume mounting configuration
 
 ### 🔐 Security & RBAC
-- **Service Accounts** - Custom service accounts with annotations
+- **RBAC** - Full Role-Based Access Control with Role/ClusterRole (NEW in v1.1.0)
+- **Service Accounts** - Custom service accounts with cloud IAM integration
 - **Secrets** - Multiple secrets with different types
 - **ConfigMaps** - Configuration management
 - **Pod Security Context** - Security policies
+- **Cloud IAM** - AWS IRSA, GCP Workload Identity support (NEW in v1.1.0)
 
 ### 🛡️ Availability
 - **Pod Disruption Budget** - Availability guarantees during maintenance
@@ -77,10 +95,48 @@ helm install my-db ./universal_chart \
   --set kind=StatefulSet \
   --set image.repository=postgres \
   --set image.tag=13 \
-  --set replicaCount=3 \
-  --set persistentVolumeClaims[0].name=data \
-  --set persistentVolumeClaims[0].accessModes[0]=ReadWriteOnce \
-  --set persistentVolumeClaims[0].resources.requests.storage=10Gi
+  --set replicaCount=3
+```
+
+### Job Example (NEW)
+
+```bash
+# Run a one-time database migration job
+helm install db-migration ./universal_chart \
+  --set kind=Job \
+  --set job.ttlSecondsAfterFinished=3600 \
+  --set containers[0].name=migration \
+  --set containers[0].image.repository=migrate/migrate \
+  --set containers[0].image.tag=latest
+```
+
+### CronJob Example (NEW)
+
+```bash
+# Schedule daily backup at midnight
+helm install daily-backup ./universal_chart \
+  --set kind=CronJob \
+  --set cronJob.schedule="0 0 * * *" \
+  --set containers[0].name=backup \
+  --set containers[0].image.repository=backup-tool \
+  --set containers[0].image.tag=latest
+```
+
+### With RBAC (NEW)
+
+```bash
+# Deploy with RBAC permissions
+helm install my-app ./universal_chart -f - <<EOF
+kind: Deployment
+rbac:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["get", "list", "watch"]
+serviceAccount:
+  create: true
+EOF
 ```
 
 ## Configuration
@@ -89,7 +145,7 @@ helm install my-db ./universal_chart \
 
 ```yaml
 # Choose your workload type
-kind: Deployment  # or DaemonSet or StatefulSet
+kind: Deployment  # Deployment, DaemonSet, StatefulSet, Job, or CronJob
 ```
 
 ### Multiple Containers
@@ -247,6 +303,109 @@ secrets:
     data:
       tls.crt: LS0tLS1CRUdJTi...
       tls.key: LS0tLS1CRUdJTi...
+```
+
+### RBAC Configuration (NEW in v1.1.0)
+
+```yaml
+# Enable RBAC
+rbac:
+  create: true
+  clusterWide: false  # Set to true for ClusterRole instead of Role
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "configmaps"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list"]
+
+serviceAccount:
+  create: true
+  annotations:
+    # AWS IAM Role for Service Account (IRSA)
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/IAM_ROLE_NAME
+    # GCP Workload Identity
+    # iam.gke.io/gcp-service-account: GSA_NAME@PROJECT_ID.iam.gserviceaccount.com
+```
+
+### Job Configuration (NEW in v1.1.0)
+
+```yaml
+kind: Job
+
+job:
+  backoffLimit: 6                    # Number of retries
+  completions: 1                     # Number of successful completions
+  parallelism: 1                     # Parallel pods
+  activeDeadlineSeconds: 3600        # Timeout (1 hour)
+  ttlSecondsAfterFinished: 86400     # Cleanup after 24 hours
+  suspend: false
+
+containers:
+  - name: migration
+    image:
+      repository: migrate/migrate
+      tag: latest
+    command:
+      - migrate
+      - -path=/migrations
+      - -database=postgres://...
+      - up
+```
+
+### CronJob Configuration (NEW in v1.1.0)
+
+```yaml
+kind: CronJob
+
+cronJob:
+  schedule: "0 2 * * *"              # Daily at 2 AM
+  timeZone: "America/New_York"       # Requires K8s 1.24+
+  concurrencyPolicy: Forbid          # Don't run concurrent jobs
+  suspend: false
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+job:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600      # Cleanup after 1 hour
+
+containers:
+  - name: backup
+    image:
+      repository: backup-tool
+      tag: latest
+    env:
+      - name: BACKUP_TARGET
+        value: s3://my-bucket/backups
+```
+
+### Update Strategy (NEW in v1.1.0)
+
+```yaml
+# For Deployment (RollingUpdate or Recreate)
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# For DaemonSet
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# For StatefulSet
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    partition: 0  # Update all pods
+
+revisionHistoryLimit: 10  # Number of old versions to keep
+minReadySeconds: 0        # Wait time before marking pod ready
 ```
 
 ### Network Policy
@@ -459,15 +618,65 @@ See the `values.yaml` file for a complete list of all available configuration op
 
 ## Requirements
 
-- Kubernetes 1.19+
-- Helm 3.0+
-- For VPA: Vertical Pod Autoscaler controller installed
-- For Network Policies: CNI that supports Network Policies
+- **Kubernetes:** 1.19+
+- **Helm:** 3.0+
+- **Optional:**
+  - VPA: Vertical Pod Autoscaler controller for VPA support
+  - Network Policies: CNI plugin that supports Network Policies (e.g., Calico, Cilium)
+  - RBAC: Enabled in cluster (default in most clusters)
+
+## Installation
+
+### From Source
+
+```bash
+# Clone the repository
+git clone https://github.com/shakokakhadze/universal-helm-chart.git
+cd universal-helm-chart
+
+# Install the chart
+helm install my-release .
+
+# Or with custom values
+helm install my-release . -f my-values.yaml
+```
+
+### Upgrade
+
+```bash
+# Upgrade to latest version
+helm upgrade my-release . --reuse-values
+
+# Upgrade with new values
+helm upgrade my-release . -f my-values.yaml
+```
+
+### Uninstall
+
+```bash
+helm uninstall my-release
+```
 
 ## Contributing
 
-This chart is designed to be universal and extensible. Feel free to contribute additional features or improvements.
+This chart is designed to be universal and extensible. Contributions are welcome!
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test with `helm lint` and `helm template`
+5. Submit a pull request
+
+## Changelog
+
+See [IMPROVEMENTS_v1.1.0.md](IMPROVEMENTS_v1.1.0.md) for the latest changes.
 
 ## License
 
 This project is licensed under the MIT License.
+
+---
+
+**Current Version:** 1.1.0  
+**Maintainer:** Shako Kakhadze (shakokakhadze@gmail.com)  
+**Repository:** https://github.com/shakokakhadze/universal-helm-chart

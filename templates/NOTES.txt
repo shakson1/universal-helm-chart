@@ -1,0 +1,173 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }}
+  $ helm get all {{ .Release.Name }}
+
+================================================================================
+WORKLOAD INFORMATION
+================================================================================
+
+Workload Type: {{ .Values.kind }}
+{{- if eq .Values.kind "Deployment" }}
+Replicas: {{ .Values.replicaCount }}
+{{- else if eq .Values.kind "StatefulSet" }}
+Replicas: {{ .Values.replicaCount }}
+Service Name: {{ .Values.statefulSet.serviceName | default (include "universal-app.fullname" .) }}
+{{- else if eq .Values.kind "CronJob" }}
+Schedule: {{ .Values.cronJob.schedule }}
+{{- end }}
+
+To check the status of your {{ .Values.kind }}:
+{{- if eq .Values.kind "Deployment" }}
+  $ kubectl get deployment {{ include "universal-app.fullname" . }} -n {{ .Release.Namespace }}
+{{- else if eq .Values.kind "DaemonSet" }}
+  $ kubectl get daemonset {{ include "universal-app.fullname" . }} -n {{ .Release.Namespace }}
+{{- else if eq .Values.kind "StatefulSet" }}
+  $ kubectl get statefulset {{ include "universal-app.fullname" . }} -n {{ .Release.Namespace }}
+{{- else if eq .Values.kind "Job" }}
+  $ kubectl get job {{ include "universal-app.fullname" . }} -n {{ .Release.Namespace }}
+{{- else if eq .Values.kind "CronJob" }}
+  $ kubectl get cronjob {{ include "universal-app.fullname" . }} -n {{ .Release.Namespace }}
+{{- end }}
+
+To view the pods:
+  $ kubectl get pods -l app.kubernetes.io/name={{ include "universal-app.name" . }},app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }}
+
+To view logs:
+  $ kubectl logs -l app.kubernetes.io/name={{ include "universal-app.name" . }},app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }}
+
+================================================================================
+SERVICE & NETWORKING
+================================================================================
+{{- if .Values.service.enabled }}
+
+Service: {{ include "universal-app.fullname" . }}
+Type: {{ .Values.service.type }}
+
+{{- if eq .Values.service.type "ClusterIP" }}
+The service is accessible within the cluster at:
+  {{ include "universal-app.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+{{- else if eq .Values.service.type "NodePort" }}
+Get the application URL by running:
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "universal-app.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if eq .Values.service.type "LoadBalancer" }}
+Get the application URL by running:
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  You can watch the status by running:
+    $ kubectl get svc --namespace {{ .Release.Namespace }} -w {{ include "universal-app.fullname" . }}
+
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "universal-app.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo http://$SERVICE_IP:{{ (index .Values.service.ports 0).port | default .Values.service.port }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+
+Ingress is enabled. Your application should be accessible at:
+{{- range .Values.ingress.hosts }}
+  {{- range .paths }}
+  - http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+================================================================================
+AUTOSCALING
+================================================================================
+{{- if .Values.hpa.enabled }}
+
+Horizontal Pod Autoscaler (HPA) is enabled:
+  Min Replicas: {{ .Values.hpa.minReplicas }}
+  Max Replicas: {{ .Values.hpa.maxReplicas }}
+  {{- if .Values.hpa.targetCPUUtilizationPercentage }}
+  Target CPU: {{ .Values.hpa.targetCPUUtilizationPercentage }}%
+  {{- end }}
+  {{- if .Values.hpa.targetMemoryUtilizationPercentage }}
+  Target Memory: {{ .Values.hpa.targetMemoryUtilizationPercentage }}%
+  {{- end }}
+
+To check HPA status:
+  $ kubectl get hpa {{ include "universal-app.fullname" . }} -n {{ .Release.Namespace }}
+{{- end }}
+
+{{- if .Values.vpa.enabled }}
+
+Vertical Pod Autoscaler (VPA) is enabled:
+  Mode: {{ .Values.vpa.mode }}
+
+To check VPA status:
+  $ kubectl get vpa {{ include "universal-app.fullname" . }} -n {{ .Release.Namespace }}
+  $ kubectl describe vpa {{ include "universal-app.fullname" . }} -n {{ .Release.Namespace }}
+{{- end }}
+
+================================================================================
+SECURITY & RBAC
+================================================================================
+{{- if or .Values.serviceAccount.enabled .Values.serviceAccount.create }}
+
+Service Account: {{ include "universal-app.serviceAccountName" . }}
+{{- end }}
+
+{{- if .Values.rbac.create }}
+RBAC is enabled:
+{{- if .Values.rbac.clusterWide }}
+  - ClusterRole: {{ include "universal-app.fullname" . }}
+  - ClusterRoleBinding: {{ include "universal-app.fullname" . }}
+{{- else }}
+  - Role: {{ include "universal-app.fullname" . }}
+  - RoleBinding: {{ include "universal-app.fullname" . }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.networkPolicy.enabled }}
+
+Network Policy is enabled to control traffic to/from pods.
+{{- end }}
+
+{{- if .Values.pdb.enabled }}
+
+Pod Disruption Budget (PDB) is enabled to ensure availability during disruptions.
+{{- end }}
+
+================================================================================
+STORAGE
+================================================================================
+{{- if and (eq .Values.kind "StatefulSet") .Values.persistentVolumeClaims }}
+
+Persistent Volume Claims:
+{{- range .Values.persistentVolumeClaims }}
+  - {{ .name }}: {{ .resources.requests.storage }}{{- if .storageClassName }} ({{ .storageClassName }}){{- end }}
+{{- end }}
+
+To check PVC status:
+  $ kubectl get pvc -l app.kubernetes.io/name={{ include "universal-app.name" . }},app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- end }}
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+If you encounter issues, check the following:
+
+1. Check pod status and events:
+   $ kubectl describe pod -l app.kubernetes.io/name={{ include "universal-app.name" . }} -n {{ .Release.Namespace }}
+
+2. Check pod logs:
+   $ kubectl logs -l app.kubernetes.io/name={{ include "universal-app.name" . }} -n {{ .Release.Namespace }} --tail=50
+
+3. Check all resources:
+   $ kubectl get all -l app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }}
+
+4. For debugging, you can exec into a pod:
+   $ kubectl exec -it <pod-name> -n {{ .Release.Namespace }} -- /bin/sh
+
+================================================================================
+
+For more information, visit: https://github.com/your-org/universal-helm-chart
+

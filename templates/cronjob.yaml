@@ -1,0 +1,63 @@
+{{- if eq .Values.kind "CronJob" }}
+{{- $apiVersion := "batch/v1" }}
+{{- if semverCompare "<1.21-0" .Capabilities.KubeVersion.GitVersion }}
+{{- $apiVersion = "batch/v1beta1" }}
+{{- end }}
+apiVersion: {{ $apiVersion }}
+kind: CronJob
+metadata:
+  name: {{ include "universal-app.fullname" . }}
+  labels:
+    {{- include "universal-app.labels" . | nindent 4 }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  schedule: {{ .Values.cronJob.schedule | quote }}
+  {{- if .Values.cronJob.timeZone }}
+  timeZone: {{ .Values.cronJob.timeZone }}
+  {{- end }}
+  {{- if .Values.cronJob.concurrencyPolicy }}
+  concurrencyPolicy: {{ .Values.cronJob.concurrencyPolicy }}
+  {{- end }}
+  {{- if .Values.cronJob.suspend }}
+  suspend: {{ .Values.cronJob.suspend }}
+  {{- end }}
+  {{- if .Values.cronJob.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ .Values.cronJob.startingDeadlineSeconds }}
+  {{- end }}
+  {{- if .Values.cronJob.successfulJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ .Values.cronJob.successfulJobsHistoryLimit }}
+  {{- end }}
+  {{- if .Values.cronJob.failedJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cronJob.failedJobsHistoryLimit }}
+  {{- end }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "universal-app.labels" . | nindent 8 }}
+      {{- with .Values.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.job.backoffLimit }}
+      backoffLimit: {{ .Values.job.backoffLimit }}
+      {{- end }}
+      {{- if .Values.job.completions }}
+      completions: {{ .Values.job.completions }}
+      {{- end }}
+      {{- if .Values.job.parallelism }}
+      parallelism: {{ .Values.job.parallelism }}
+      {{- end }}
+      {{- if .Values.job.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+      {{- end }}
+      {{- if .Values.job.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+      {{- end }}
+      template:
+        {{- include "universal-app.podTemplate" . | nindent 8 }}
+{{- end }}
+

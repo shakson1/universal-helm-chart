@@ -1,11 +1,37 @@
 # Universal Helm Chart Configuration
-# This chart supports Deployment, DaemonSet, and StatefulSet workloads
+# This chart supports Deployment, DaemonSet, StatefulSet, Job, and CronJob workloads
 
-# Workload type: Deployment, DaemonSet, or StatefulSet
+# Workload type: Deployment, DaemonSet, StatefulSet, Job, or CronJob
 kind: Deployment
 
-# Replica configuration
+# Name overrides
+nameOverride: ""
+fullnameOverride: ""
+
+# Replica configuration (applies to Deployment and StatefulSet)
 replicaCount: 2
+
+# Update Strategy (for Deployment and DaemonSet)
+updateStrategy: {}
+# For Deployment (type: RollingUpdate or Recreate):
+#   type: RollingUpdate
+#   rollingUpdate:
+#     maxSurge: 1
+#     maxUnavailable: 0
+# For DaemonSet (type: RollingUpdate or OnDelete):
+#   type: RollingUpdate
+#   rollingUpdate:
+#     maxUnavailable: 1
+# For StatefulSet (type: RollingUpdate or OnDelete):
+#   type: RollingUpdate
+#   rollingUpdate:
+#     partition: 0
+
+# Revision History Limit (number of old ReplicaSets/ControllerRevisions to retain)
+revisionHistoryLimit: 10
+
+# Min Ready Seconds (minimum time for pod to be ready before being considered available)
+minReadySeconds: 0
 
 # Image configuration
 image:
@@ -152,6 +178,11 @@ networkPolicy:
         - protocol: TCP
           port: 53
 
+# StatefulSet specific configuration
+statefulSet:
+  serviceName: ""  # If not set, uses fullname
+  podManagementPolicy: OrderedReady  # OrderedReady or Parallel
+
 # Persistent Volume Claims (for StatefulSets)
 persistentVolumeClaims: []
 # - name: data
@@ -161,6 +192,8 @@ persistentVolumeClaims: []
 #     requests:
 #       storage: 1Gi
 #   storageClassName: standard
+#   labels: {}
+#   annotations: {}
 
 # Volumes
 volumes: []
@@ -192,9 +225,25 @@ secrets: []
 # Service Account
 serviceAccount:
   enabled: true
+  create: true  # Set to false to use an existing service account
   name: ""
   annotations: {}
-  # automountServiceAccountToken: true
+  # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/IAM_ROLE_NAME
+  automountServiceAccountToken: true
+
+# RBAC Configuration
+rbac:
+  create: false
+  clusterWide: false  # Set to true to create ClusterRole/ClusterRoleBinding instead of Role/RoleBinding
+  annotations: {}
+  rules: []
+  # Example rules:
+  # - apiGroups: [""]
+  #   resources: ["pods"]
+  #   verbs: ["get", "list", "watch"]
+  # - apiGroups: ["apps"]
+  #   resources: ["deployments"]
+  #   verbs: ["get", "list"]
 
 # Pod Security Context
 podSecurityContext: {}
@@ -455,3 +504,22 @@ tty: false
 
 # Container Name (legacy support)
 containerName: app
+
+# Job Configuration (when kind=Job)
+job:
+  backoffLimit: 6
+  completions: 1
+  parallelism: 1
+  activeDeadlineSeconds: null
+  ttlSecondsAfterFinished: null  # Cleanup completed jobs after N seconds
+  suspend: false
+
+# CronJob Configuration (when kind=CronJob)
+cronJob:
+  schedule: "0 0 * * *"  # Daily at midnight
+  timeZone: null  # e.g., "America/New_York" (requires Kubernetes 1.24+)
+  concurrencyPolicy: Allow  # Allow, Forbid, or Replace
+  suspend: false
+  startingDeadlineSeconds: null
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
