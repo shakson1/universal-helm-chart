@@ -1,7 +1,7 @@
 
 # Universal Helm Chart
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/shakokakhadze/universal-helm-chart)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/shakokakhadze/universal-helm-chart)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A comprehensive, production-ready Helm chart that can deploy any type of Kubernetes application with full support for all Kubernetes features. This universal chart eliminates the need to maintain multiple chart templates by supporting all major workload types and features in a single, well-maintained chart.
@@ -677,6 +677,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**Current Version:** 1.1.0  
+**Current Version:** 1.2.0  
 **Maintainer:** Shako Kakhadze (shakokakhadze@gmail.com)  
 **Repository:** https://github.com/shakokakhadze/universal-helm-chart
